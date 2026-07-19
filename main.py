@@ -14,6 +14,7 @@ from Admin.login import LoginPage
 from Admin.product import InputBarangTab
 from Admin.employee import KaryawanTab
 from Admin.absen import AbsensiKaryawanTab
+from Admin.computer_config import get_database_path
 from Admin.Theme.dashbord import DashboardPengaturan, THEMES, get_theme
 from Admin.Theme.header import HeaderToko
 from Admin.Theme.sidebar import SidebarKasir
@@ -21,9 +22,9 @@ from Admin.Theme.sidebar import SidebarKasir
 COLORS = get_theme("Gelap")
 
 FONT = "Segoe UI"
-DB_PATH = Path(__file__).resolve().parent / "Admin" / "toko.db"
+DB_PATH = get_database_path()
 THEME_DIR = Path(__file__).resolve().parent / "Admin" / "Theme"
-EMPLOYEE_PHOTO_DIR = Path(__file__).resolve().parent / "Admin" / "EmployeePhotos"
+EMPLOYEE_PHOTO_DIR = DB_PATH.parent / "EmployeePhotos"
 DEFAULT_LOGO_PATH = THEME_DIR / "Clue_Theam.png"
 DEFAULT_ICON_PATH = THEME_DIR / "Clue_Theam.ico"
 CUSTOM_ICON_PATH = THEME_DIR / "icon.png"
@@ -484,6 +485,7 @@ class AplikasiKasir(ctk.CTk):
             EMPLOYEE_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
             destination = EMPLOYEE_PHOTO_DIR / f"{id_karyawan}{source.suffix.lower()}"
             shutil.copy2(source, destination)
+            stored_photo = str(Path("EmployeePhotos") / destination.name)
             with sqlite3.connect(DB_PATH) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -491,7 +493,7 @@ class AplikasiKasir(ctk.CTk):
                        (id_karyawan, nama, no_hp, jabatan, gaji, no_ktp, foto, periode_gaji)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (id_karyawan, nama, no_hp, jabatan, gaji, no_ktp,
-                     str(destination.resolve()), periode_gaji),
+                     stored_photo, periode_gaji),
                 )
                 self.create_user(cursor, id_karyawan, nama, "Karyawan", password)
             return True, f"Karyawan '{nama}' berhasil disimpan."
@@ -502,10 +504,16 @@ class AplikasiKasir(ctk.CTk):
 
     def ambil_daftar_karyawan(self):
         with sqlite3.connect(DB_PATH) as conn:
-            return conn.execute(
+            rows = conn.execute(
                 """SELECT id_karyawan, nama, no_hp, jabatan, gaji, no_ktp, foto, periode_gaji
                    FROM karyawan ORDER BY nama COLLATE NOCASE"""
             ).fetchall()
+        result = []
+        for row in rows:
+            photo = Path(row[6]) if row[6] else Path()
+            resolved_photo = photo if photo.is_absolute() else DB_PATH.parent / photo
+            result.append((*row[:6], str(resolved_photo), row[7]))
+        return result
 
     def edit_karyawan(self, id_karyawan, nama, no_hp, jabatan, gaji, no_ktp, foto, password, periode_gaji):
         with sqlite3.connect(DB_PATH) as conn:
@@ -531,13 +539,14 @@ class AplikasiKasir(ctk.CTk):
         try:
             if source.resolve() != destination.resolve():
                 shutil.copy2(source, destination)
+            stored_photo = str(Path("EmployeePhotos") / destination.name)
             with sqlite3.connect(DB_PATH) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """UPDATE karyawan
                        SET nama = ?, no_hp = ?, jabatan = ?, gaji = ?, no_ktp = ?, foto = ?, periode_gaji = ?
                        WHERE id_karyawan = ?""",
-                    (nama, no_hp, jabatan, gaji, no_ktp, str(destination.resolve()),
+                    (nama, no_hp, jabatan, gaji, no_ktp, stored_photo,
                      periode_gaji, id_karyawan),
                 )
                 cursor.execute(
