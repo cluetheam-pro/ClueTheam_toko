@@ -361,10 +361,28 @@ class AplikasiKasir(ctk.CTk):
             self.content_frame.destroy()
         self.build_sidebar("absensi")
         self.content_frame = AbsensiKaryawanTab(
-            self, COLORS, self.current_user, self.absen_masuk,
-            self.absen_pulang, self.ambil_absensi_hari_ini, FONT,
+            self, COLORS, self.current_user, self.proses_scan_absensi,
+            self.ambil_absensi_hari_ini, FONT,
         )
         self.content_frame.grid(row=1, column=1, padx=28, pady=20, sticky="nsew")
+
+    def proses_scan_absensi(self, id_karyawan):
+        if not id_karyawan:
+            return False, "Barcode ID Card belum terbaca."
+        if (self.current_user[2].casefold() == "karyawan"
+                and id_karyawan != self.current_user[0].upper()):
+            return False, "Karyawan hanya dapat menggunakan ID Card miliknya sendiri."
+        today = datetime.now().strftime("%Y-%m-%d")
+        with sqlite3.connect(DB_PATH) as conn:
+            attendance = conn.execute(
+                "SELECT jam_masuk, jam_pulang FROM absensi WHERE id_karyawan = ? AND tanggal = ?",
+                (id_karyawan, today),
+            ).fetchone()
+        if not attendance:
+            return self.absen_masuk(id_karyawan)
+        if not attendance[1]:
+            return self.absen_pulang(id_karyawan)
+        return False, f"Absensi hari ini sudah lengkap. Masuk {attendance[0]}, pulang {attendance[1]}."
 
     def absen_masuk(self, id_karyawan):
         if not id_karyawan:
